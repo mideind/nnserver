@@ -1,5 +1,6 @@
 * Simple setup: tensorflow model server without GPU or other accelerations
-  * Install =nnserver/requirements.txt=.
+  * Install =sudo apt-get install libevent-dev= (flask dependency).
+  * Install =python setup.py install=.
   * Setup [[https://www.tensorflow.org/tfx/serving/setup][tensorflow model server]] first.
   * Acquire an exported =model.tar.gz=, extract it and place it in =model_base=.
   #+BEGIN_SRC bash
