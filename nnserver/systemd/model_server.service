@@ -10,7 +10,7 @@ User=${USER}
 Group=${USER}
 WorkingDirectory=/tmp
 EnvironmentFile=/etc/systemd/system/nnserver.env
-ExecStartPre=bash -c "/usr/bin/docker container ls --quiet --filter name=%n | grep -q ^ && $(docker stop %n && docker container rm %n) || : "
+ExecStartPre=/bin/bash -c "/usr/bin/docker container ls --quiet --filter name=%n | grep -q ^ && $(docker stop %n && docker container rm %n) || : "
 ExecStart=/usr/bin/docker run \
     --rm \
     --name %n \
@@ -28,7 +28,7 @@ ExecStart=/usr/bin/docker run \
     --model_config_file=/models/models.conf \
     --port=${NN_GRPC_PORT} \
     --rest_api_port=${NN_REST_PORT}
-ExecStop=bash -c "/usr/bin/docker ps -q --filter name=%n | grep -q ^ && docker kill %n || :"
+ExecStop=/bin/bash -c "/usr/bin/docker ps -q --filter name=%n | grep -q ^ && docker kill %n || :"
 Restart=always
 StandardOutput=syslog
 StandardError=syslog
