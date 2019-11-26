@@ -1,0 +1,36 @@
+[Unit]
+Description=Docker container for neural network model server
+Documentation=info:docker man:docker http://docs.docker.com
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=${USER}
+Group=${USER}
+WorkingDirectory=/tmp
+EnvironmentFile=/etc/systemd/system/nnserver.env
+ExecStartPre=bash -c "/usr/bin/docker container ls --quiet --filter name=%n | grep -q ^ && $(docker stop %n && docker container rm %n) || : "
+ExecStart=/usr/bin/docker run \
+    --rm \
+    --name %n \
+    --shm-size=1g \
+    --ulimit memlock=-1 \
+    --gpus '"device=0"' \
+    --volume ${NN_MODEL_DIR}:/models \
+    --publish ${NN_REST_PORT}:${NN_REST_PORT}/tcp \
+    --publish ${NN_GRPC_PORT}:${NN_GRPC_PORT}/tcp \
+    --env HOST_PERMS="$(id -u):$(id -g)" \
+    --env LANG="C.UTF-8" \
+    --env LANGUAGE="C.UTF-8" \
+    --env LC_ALL="C.UTF-8" \
+    tensorflow/serving \
+    --model_config_file=/models/models.conf \
+    --port=${NN_GRPC_PORT} \
+    --rest_api_port=${NN_REST_PORT}
+ExecStop=bash -c "/usr/bin/docker ps -q --filter name=%n | grep -q ^ && docker kill %n || :"
+Restart=always
+StandardOutput=syslog
+StandardError=syslog
+TimeoutStartSec=30
+RestartSec=30

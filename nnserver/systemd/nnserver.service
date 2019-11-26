@@ -1,0 +1,24 @@
+[Unit]
+Description=Transcoding middleware server for neural network server
+After=model_server.service
+Requires=model_server.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/systemd/system/nnserver.env
+User=${USER}
+Group=${USER}
+WorkingDirectory=${NNSERVER_DIR}
+ExecStart=${PYTHON_VENV}/python nnserver.py --debug --listen_port ${NNSERVER_LISTEN_PORT} --model_port ${NN_REST_PORT}
+Environment="PATH=${PYTHON_VENV}"
+Environment="PYTHONIOENCODING=utf-8"
+Environment="PYTHONUNBUFFERED=True"
+StandardOutput=syslog
+StandardError=syslog
+Restart=always
+TimeoutStartSec=3
+RestartSec=3
+
+
+[Install]
+WantedBy=multi-user.target
