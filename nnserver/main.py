@@ -48,11 +48,10 @@
         --inputs_once "Kominn."
 """
 
-import requests
 import base64
 import json
 import os
-import pkg_resources
+import requests
 
 from tensor2tensor.data_generators import text_encoder
 from tensorflow.core.example import feature_pb2
@@ -60,16 +59,11 @@ from tensorflow.core.example import example_pb2
 
 from flask import Flask, jsonify, request
 
+from nnserver import _ENIS_VOCAB, _PARSING_VOCAB
+from nnserver.composite_encoder import CompositeTokenEncoder
 
 EOS_ID = text_encoder.EOS_ID
 PAD_ID = text_encoder.PAD_ID
-
-_RESOURCES = pkg_resources.resource_filename(__package__, "resources")
-_ENIS_VOCAB = os.path.join(_RESOURCES, "vocab.translate_enis16k.16384.subwords")
-_PARSING_VOCAB = os.path.join(_RESOURCES, "parsing_tokens_180729.txt")
-
-from nnserver.composite_encoder import CompositeTokenEncoder
-
 
 app = Flask(__name__)
 
@@ -87,9 +81,13 @@ class NnServer:
     @classmethod
     def request(cls, pgs):
         """ Send serialized request to remote model server """
+
+        ms_host = os.environ.get('MS_HOST', app.config.get("out_host"))
+        ms_port = os.environ.get('MS_PORT', app.config.get("out_port"))
+
         url = "http://{host}:{port}/{version}/models/{model}:{verb}".format(
-            port=app.config.get("out_port"),
-            host=app.config.get("out_host"),
+            port=ms_port,
+            host=ms_host,
             version=cls._tfms_version,
             model=cls._model_name,
             verb=cls._verb,
@@ -143,9 +141,6 @@ class NnServer:
     def serialize_to_instance(cls, sent, src_enc=None, tgt_enc=None):
         """ Encodes a single sentence into the format expected by the RESTful interface
         of tensorflow_model_server running an exported tensor2tensor transformer translation model """
-        # Add end of sentence token
-        src_enc = src_enc or cls.src_enc
-        tgt_enc = tgt_enc or cls.tgt_enc
 
         input_ids = cls.src_enc.encode(sent)
         app.logger.info("received: " + sent)
@@ -169,7 +164,6 @@ class ParsingServer(NnServer):
         to the Reynir schema """
 
     src_enc = text_encoder.SubwordTextEncoder(_ENIS_VOCAB)
-    # tgt_enc = CompositeTokenEncoder(_PARSING_VOCAB_PATH, version=1)
     tgt_enc = CompositeTokenEncoder(_PARSING_VOCAB, version=1)
     _model_name = "parse"
 
@@ -180,7 +174,6 @@ class TranslateServer(NnServer):
 
     src_enc = text_encoder.SubwordTextEncoder(_ENIS_VOCAB)
     tgt_enc = src_enc
-    # _model_name = "translate"
     _model_name = "translate_v2"
 
 

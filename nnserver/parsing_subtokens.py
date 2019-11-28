@@ -25,15 +25,7 @@
 
 """
 
-import os
-import pkgutil
-import pkg_resources
-
-from nnserver.nnserver import _PARSING_VOCAB
-
-# _RESOURCES = pkg_resources.resource_filename(__package__, "resources")
-# _DEFAULT_PATH = os.path.join(_RESOURCES, "parsing_tokens.txt")
-# _PARSING_VOCAB_PATH = os.path.join(_RESOURCES, "parsing_tokens_180729.txt")
+from nnserver import _PARSING_VOCAB
 
 UNK = "<UNK>"
 MISSING = ["NP-AGE", "ADVP-DUR"]

@@ -27,12 +27,10 @@
 
 """
 
-import os
-
 from tensor2tensor.data_generators import text_encoder
 from nnserver.parsing_subtokens import ParsingSubtokens
 
-from nnserver.nnserver import _PARSING_VOCAB
+from nnserver import _PARSING_VOCAB
 
 _CASE_TOKS = set(["nf", "þf", "þgf", "ef"])
 
