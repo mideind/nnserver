@@ -15,3 +15,14 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see http://www.gnu.org/licenses/.
 """
+
+import os
+import pkg_resources
+
+
+try:
+    _RESOURCES = pkg_resources.resource_filename(__package__, "resources")
+except (KeyError, TypeError, ValueError) as e:
+    _RESOURCES = "/nnserver/nnserver/resources"
+_ENIS_VOCAB = os.path.join(_RESOURCES, "vocab.translate_enis16k.16384.subwords")
+_PARSING_VOCAB = os.path.join(_RESOURCES, "parsing_tokens_180729.txt")

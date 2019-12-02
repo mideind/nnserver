@@ -38,10 +38,8 @@ setup(
     scripts=["nnserver/bin/nnserver"],
     package_data={"nnserver": ["resources/*"]},
     install_requires=[
-        # "Flask==1.0.2",
         'gevent<=1.4',
         "flask",
-        # "tensor2tensor==1.8.0",
         "tensorflow<2",
         "tensor2tensor",
         "reynir==1.3.1",
