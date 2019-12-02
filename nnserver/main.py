@@ -139,12 +139,16 @@ class NnServer:
 
     @classmethod
     def serialize_to_instance(cls, sent, src_enc=None, tgt_enc=None):
-        """ Encodes a single sentence into the format expected by the RESTful interface
-        of tensorflow_model_server running an exported tensor2tensor transformer translation model """
+        """ Encodes a single sentence into the format expected by the RESTful
+            interface of tensorflow_model_server running an exported tensor2tensor
+            transformer translation model
+        """
 
-        input_ids = cls.src_enc.encode(sent)
+        src_enc = src_enc or cls.src_enc
+
+        input_ids = src_enc.encode(sent)
         app.logger.info("received: " + sent)
-        app.logger.debug("tokenized: " + str(cls.src_enc.decode_list(input_ids)))
+        app.logger.debug("tokenized: " + str(src_enc.decode_list(input_ids)))
         app.logger.debug("input_ids: " + str(input_ids))
         input_ids.append(EOS_ID)
 
