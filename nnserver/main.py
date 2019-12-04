@@ -103,16 +103,15 @@ class NnServer:
         obj = json.loads(resp.text)
         predictions = obj["predictions"]
         results = [
-            cls.process_response_instance(inst, sent)
+            cls.process_response_instance(inst)
             for (inst, sent) in zip(predictions, pgs)
         ]
         obj["predictions"] = results
         return obj
 
     @classmethod
-    def process_response_instance(cls, instance, sent, src_enc=None, tgt_enc=None):
+    def process_response_instance(cls, instance, tgt_enc=None):
         """  Process the numerical output from the model server for one sentence """
-        src_enc = src_enc or cls.src_enc
         tgt_enc = tgt_enc or cls.tgt_enc
 
         scores = instance["scores"]
@@ -126,11 +125,11 @@ class NnServer:
         pad_start = output_ids.index(PAD_ID) if PAD_ID in output_ids else length
         eos_start = output_ids.index(EOS_ID) if EOS_ID in output_ids else length
         sent_end = min(pad_start, eos_start)
-        output_toks = cls.tgt_enc.decode(output_ids[:sent_end])
+        output_toks = tgt_enc.decode(output_ids[:sent_end])
 
         app.logger.debug(
             "tokenized and depadded: "
-            + str(cls.tgt_enc.decode_list(output_ids[:sent_end]))
+            + str(tgt_enc.decode_list(output_ids[:sent_end]))
         )
         app.logger.info(output_toks)
 
@@ -138,7 +137,7 @@ class NnServer:
         return instance
 
     @classmethod
-    def serialize_to_instance(cls, sent, src_enc=None, tgt_enc=None):
+    def serialize_to_instance(cls, sent, src_enc=None):
         """ Encodes a single sentence into the format expected by the RESTful
             interface of tensorflow_model_server running an exported tensor2tensor
             transformer translation model
