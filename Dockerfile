@@ -1,4 +1,5 @@
 FROM python:3.7
+EXPOSE 5000
 RUN mkdir /nnserver/
 COPY docker/conf/bin /nnserver/bin
 COPY . /nnserver
