@@ -1,7 +1,7 @@
 ##!/usr/bin/env bash
 NN_DIR="/Users/vesteinnsnaebjarnarson/Work/mideind/nntrainer/nnserver/nnserver"
 T2T_VERSION=1.14.1
-IMAGE="nntrainer"
+IMAGE="ntrainer"
 docker run --name "parsing-v4" \
        --rm \
        --interactive \
@@ -17,4 +17,4 @@ docker run --name "parsing-v4" \
        --publish 8888:8888/tcp \
        --publish 9999:9999/tcp \
        --env HOST_PERMS="$(id -u):$(id -g)" \
-       $IMAGE /scripts/generate_data.sh
+       $IMAGE /scripts/train.sh
