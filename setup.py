@@ -44,5 +44,6 @@ setup(
         "tensor2tensor",
         "reynir==1.3.1",
         "tokenizer==1.0.8",
+        "subword-nmt",
     ],
 )

@@ -52,6 +52,7 @@ import base64
 import json
 import os
 import requests
+import itertools
 
 from tensor2tensor.data_generators import text_encoder
 from tensorflow.core.example import feature_pb2
@@ -59,8 +60,10 @@ from tensorflow.core.example import example_pb2
 
 from flask import Flask, jsonify, request
 
-from nnserver import _ENIS_VOCAB, _PARSING_VOCAB
+from nnserver import _ENIS_VOCAB, _ONMT_EN_VOCAB, _ONMT_IS_VOCAB
 from nnserver.composite_encoder import CompositeTokenEncoder
+
+from subword_nmt import apply_bpe
 
 EOS_ID = text_encoder.EOS_ID
 PAD_ID = text_encoder.PAD_ID
@@ -69,15 +72,29 @@ app = Flask(__name__)
 
 
 MODEL_NAMES = {
-    "transformer": {
-        "is-en": "translate_v2",
-        "en-is": "translate_enis16k"
-    },
-    "bilstm": {
-        "en-is": "bilstm-translate_enis16k_bt"
-    }
+    "transformer": {"is-en": "translate_v2", "en-is": "translate_enis16k"},
+    "bilstm": {"en-is": "bilstm-translate_enis16k_bt"},
 }
 
+
+class _SubwordNmtEncoder:
+    """Wrap subword-nmt's BPE encoder with Tensor2tensors api"""
+
+    def __init__(self, path):
+        with open(path, "r") as fp:
+            self._bpe = apply_bpe.BPE(fp)
+
+    def encode(self, text):
+        return self._bpe.process_line(text)
+
+    def decode(self, flat_text):
+        res = flat_text.replace("@@ ", "")
+        if len(res) > 1 and flat_text[-2] == "@@":
+            return res[:-2]
+        return res
+
+    def decode_list(self, flat_text):
+        return flat_text
 
 class NnServer:
     """ Client that mimics the HTTP RESTful interface of
@@ -90,14 +107,14 @@ class NnServer:
     tgt_enc = None
 
     @classmethod
-    def request(cls, pgs, model_name=None):
+    def request(cls, pgs, tgt_pgs=None, model_name=None):
         """ Send serialized request to remote model server """
 
         if model_name is None:
             model_name = cls._model_name
 
-        ms_host = os.environ.get('MS_HOST', app.config.get("out_host"))
-        ms_port = os.environ.get('MS_PORT', app.config.get("out_port"))
+        ms_host = os.environ.get("MS_HOST", app.config.get("out_host"))
+        ms_port = os.environ.get("MS_PORT", app.config.get("out_port"))
 
         url = "http://{host}:{port}/{version}/models/{model}:{verb}".format(
             port=ms_port,
@@ -106,73 +123,100 @@ class NnServer:
             model=model_name,
             verb=cls._verb,
         )
-        instances = [cls.serialize_to_instance(sent) for sent in pgs]
-        payload = {"signature_name": "serving_default", "instances": instances}
-        payload = json.dumps(payload)
+        payload = cls.package_data(pgs, tgt_pgs)
         headers = {"content-type": "application/json"}
 
-        resp = requests.post(url, data=payload, headers=headers)
+        resp = requests.post(url, json=payload)
         resp.raise_for_status()
 
         obj = json.loads(resp.text)
-        predictions = obj["predictions"]
-        results = [
-            cls.process_response_instance(inst)
-            for (inst, sent) in zip(predictions, pgs)
-        ]
-        obj["predictions"] = results
-        return obj
-
-    @classmethod
-    def process_response_instance(cls, instance, tgt_enc=None):
-        """  Process the numerical output from the model server for one sentence """
-        tgt_enc = tgt_enc or cls.tgt_enc
-
-        scores = instance["scores"]
-        output_ids = instance["outputs"]
-
-        app.logger.debug("scores: " + str(scores))
-        app.logger.debug("output_ids: " + str(output_ids))
-
-        # Strip padding and eos token
-        length = len(output_ids)
-        pad_start = output_ids.index(PAD_ID) if PAD_ID in output_ids else length
-        eos_start = output_ids.index(EOS_ID) if EOS_ID in output_ids else length
-        sent_end = min(pad_start, eos_start)
-        output_toks = tgt_enc.decode(output_ids[:sent_end])
-
-        app.logger.debug(
-            "tokenized and depadded: "
-            + str(tgt_enc.decode_list(output_ids[:sent_end]))
+        results = cls.extract_results(
+            obj, pgs, tgt_pgs=tgt_pgs, src_enc=cls.src_enc, tgt_enc=cls.tgt_enc
         )
-        app.logger.info(output_toks)
-
-        instance["outputs"] = output_toks
-        return instance
+        return results
 
     @classmethod
-    def serialize_to_instance(cls, sent, src_enc=None):
-        """ Encodes a single sentence into the format expected by the RESTful
-            interface of tensorflow_model_server running an exported tensor2tensor
-            transformer translation model
-        """
-
+    def extract_results(
+        cls, resp_json_obj, pgs, tgt_pgs=None, src_enc=None, tgt_enc=None
+    ):
         src_enc = src_enc or cls.src_enc
+        tgt_enc = src_enc or cls.tgt_enc
 
-        input_ids = src_enc.encode(sent)
-        app.logger.info("received: " + sent)
-        app.logger.debug("tokenized: " + str(src_enc.decode_list(input_ids)))
-        app.logger.debug("input_ids: " + str(input_ids))
-        input_ids.append(EOS_ID)
+        def process_response_instance(instance, src_enc=None, tgt_enc=None):
+            scores = instance["scores"]
+            output_ids = instance["outputs"]
 
-        int64_list = feature_pb2.Int64List(value=input_ids)
-        feature = feature_pb2.Feature(int64_list=int64_list)
-        feature_map = {"inputs": feature}
-        features = feature_pb2.Features(feature=feature_map)
-        example = example_pb2.Example(features=features)
+            app.logger.debug("scores: " + str(scores))
+            app.logger.debug("output_ids: " + str(output_ids))
 
-        b64_example = base64.b64encode(example.SerializeToString()).decode()
-        return {"input": {"b64": b64_example}}
+            # Strip padding and eos token
+            length = len(output_ids)
+            pad_start = output_ids.index(PAD_ID) if PAD_ID in output_ids else length
+            eos_start = output_ids.index(EOS_ID) if EOS_ID in output_ids else length
+            sent_end = min(pad_start, eos_start)
+            outputs = tgt_enc.decode(output_ids[:sent_end])
+
+            app.logger.debug(
+                "tokenized and depadded: "
+                + str(tgt_enc.decode_list(output_ids[:sent_end]))
+            )
+            app.logger.info(outputs)
+
+            instance["outputs"] = outputs
+            return instance
+
+        predictions = resp_json_obj["predictions"]
+        results = [
+            process_response_instance(inst) for (inst, sent) in zip(predictions, pgs)
+        ]
+        return results
+
+    @classmethod
+    def package_data(cls, pgs, tgt_pgs=None):
+
+        def serialize_to_instance(
+            src_segment, src_enc=None, tgt_segment=None, tgt_enc=None
+        ):
+            """ Encodes a single sentence into the format expected by the RESTful
+                interface of tensorflow_model_server running an exported tensor2tensor
+                transformer translation model
+            """
+
+            src_enc = src_enc or cls.src_enc
+            tgt_enc = tgt_enc or src_enc
+
+            input_ids = src_enc.encode(src_segment) + [EOS_ID]
+            app.logger.info("input_segment: " + src_segment)
+            app.logger.debug("input_subtokens: " + str(src_enc.decode_list(input_ids)))
+            app.logger.debug("input_ids: " + str(input_ids))
+
+            int64_list = feature_pb2.Int64List(value=input_ids)
+            feature = feature_pb2.Feature(int64_list=int64_list)
+            feature_map = {"inputs": feature}
+
+            if tgt_segment is not None:
+                tgt_ids = tgt_enc.encode(tgt_segment) + [EOS_ID]
+                app.logger.info("target_segment: " + tgt_segment)
+                app.logger.debug("target_subtokens: " + str(tgt_enc.decode_list(tgt_ids)))
+                app.logger.debug("target_ids: " + str(tgt_ids))
+                tgt_int64_list = feature_pb2.Int64List(value=tgt_ids)
+                tgt_feature = feature_pb2.Feature(int64_list=tgt_int64_list)
+                feature_map["targets"] = tgt_feature
+
+            features = feature_pb2.Features(feature=feature_map)
+            example = example_pb2.Example(features=features)
+
+            b64_example = base64.b64encode(example.SerializeToString()).decode()
+            return {"input": {"b64": b64_example}}
+
+        tgt_pgs = tgt_pgs or itertools.repeat(None)
+        instances = [
+            serialize_to_instance(segment, tgt_segment=tgt_segment)
+            for (segment, tgt_segment) in zip(pgs, tgt_pgs)
+        ]
+        payload = {"signature_name": "serving_default", "instances": instances}
+        return payload
+
 
 
 class ParsingServer(NnServer):
@@ -181,7 +225,7 @@ class ParsingServer(NnServer):
         to the Reynir schema """
 
     src_enc = text_encoder.SubwordTextEncoder(_ENIS_VOCAB)
-    tgt_enc = CompositeTokenEncoder(_PARSING_VOCAB, version=1)
+    tgt_enc = CompositeTokenEncoder()
     _model_name = "parse"
 
 
@@ -192,6 +236,127 @@ class TranslateServer(NnServer):
     src_enc = text_encoder.SubwordTextEncoder(_ENIS_VOCAB)
     tgt_enc = src_enc
     _model_name = "translate_v2"
+
+
+class TranslationScoringServer(NnServer):
+    """ Client that accepts source and target text and returns
+        subword-wise estimate of translation probabilities"""
+
+    src_enc = text_encoder.SubwordTextEncoder(_ENIS_VOCAB)
+    tgt_enc = src_enc
+    _model_name = "translate_enis16k_v3-scorer"
+
+    @classmethod
+    def extract_results(
+        cls, resp_json_obj, pgs, tgt_pgs=None, src_enc=None, tgt_enc=None
+    ):
+        src_enc = src_enc or cls.src_enc
+        tgt_enc = src_enc or cls.tgt_enc
+
+        def process_response_instance(instance, src_enc=None, tgt_enc=None):
+            # Strip padding and eos token
+            output_ids = instance["outputs"]
+            length = len(output_ids)
+            pad_start = output_ids.index(PAD_ID) if PAD_ID in output_ids else length
+            eos_start = output_ids.index(EOS_ID) if EOS_ID in output_ids else length
+            sent_end = min(pad_start, eos_start)
+            sent_end_with_eos = sent_end + 1
+
+            log_probs = instance["scores"]
+            log_probs = log_probs[:sent_end_with_eos]
+
+            alpha = 0.7
+            penalty = ((len(log_probs) + 1) / 6) ** alpha
+            score = sum(log_probs) / penalty
+
+            app.logger.debug("log_probs: " + str(log_probs))
+            app.logger.debug("scores: " + str(score))
+
+            return instance
+
+        predictions = resp_json_obj["predictions"]
+        results = [
+            process_response_instance(inst) for (inst, sent) in zip(predictions, pgs)
+        ]
+        return results
+
+
+class OpenNMTTranslationServer(NnServer):
+    """ Same as TranslateServer, except uses subword-nmt as the encoder
+        along with using the OpenNMT model api"""
+
+    @classmethod
+    def package_data(cls, pgs):
+        batch = [
+            cls.src_enc.encode(segment) for (segment) in pgs
+        ]
+        batch_width = max(len(item) for item in batch)
+
+        # this might not be necessary
+        # lengths = []
+        # padded_batch = []
+        # for item in batch:
+        #     length = len(item)
+        #     padding = [""] * (batch_width - length)
+        #     lengths.append(length)
+        #     item.extend(padding)
+        #     padded_batch.append(item)
+
+        instances = [
+            {"tokens":item, "length":len(item)} for item in batch
+        ]
+
+        payload = {"signature_name": "serving_default", "instances": instances}
+        return payload
+
+    @classmethod
+    def extract_results(
+        cls, resp_json_obj, pgs, tgt_enc=None
+    ):
+        tgt_enc = tgt_enc or cls.tgt_enc
+
+        def process_response_instance(instance):
+            log_probs = instance["log_probs"]
+            tokens = instance["tokens"]
+
+            app.logger.debug("log_probs: " + str(log_probs))
+            app.logger.debug("tokens: " + str(tokens))
+
+            length = instance["length"]
+            # strip eos token
+            tokens = tokens[:length]
+            outputs = tgt_enc.decode(tokens)
+
+            app.logger.info(outputs)
+
+            instance = {
+                "outputs": outputs,
+                "score": log_probs,
+            }
+            return instance
+
+        predictions = resp_json_obj["predictions"]
+        results = [
+            process_response_instance(inst) for (inst, sent) in zip(predictions, pgs)
+        ]
+        return results
+
+
+class OpenNMTTranslationServerEnIs(NnServer):
+    """ Same as TranslateServer, except uses subword-nmt as the encoder
+        along with using the OpenNMT model api"""
+
+    src_enc = _SubwordNmtEncoder(_ONMT_EN_VOCAB)
+    tgt_enc = _SubwordNmtEncoder(_ONMT_IS_VOCAB)
+    _model_name = "translate_enis16k_v4.baseline-avg-ckpt-2.25M"
+
+
+class OpenNMTTranslationServerIsEn(NnServer):
+    """Reverse direction of OpenNMTTranslationServerEnIs"""
+
+    src_enc = _SubwordNmtEncoder(_ONMT_EN_VOCAB)
+    tgt_enc = _SubwordNmtEncoder(_ONMT_IS_VOCAB)
+    _model_name = "translate_enis16k_v4_rev-avg-ckpt-2.10M"
 
 
 @app.route("/parse.api", methods=["POST"])
@@ -216,8 +381,16 @@ def translate_api():
         req_body = request.data.decode("utf-8")
         obj = json.loads(req_body)
         pgs = obj["pgs"]
-        model_name = MODEL_NAMES[obj["model"]]["{}-{}".format(obj["source"], obj["target"])]
-        model_response = TranslateServer.request(pgs, model_name)
+        model_name = MODEL_NAMES[obj["model"]][
+            "{}-{}".format(obj["source"], obj["target"])
+        ]
+        if "lstm" in obj["model"]:
+            onmt_server = OpenNMTTranslationServerIsEn
+            if "en" not in obj["source"]:
+                onmt_server = OpenNMTTranslationServerEnIs
+            model_response = onmt_server(pgs, model_name)
+        else:
+            model_response = TranslateServer.request(pgs, model_name)
         resp = jsonify(model_response)
     except Exception as error:
         resp = jsonify(valid=False, reason="Invalid request")

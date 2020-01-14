@@ -22,11 +22,13 @@ import pkg_resources
 
 NNSERVER_RESOURCES = os.getenv("NNSERVER_RESOURCES", "/nnserver/nnserver/resources")
 NNSERVER_ENIS_VOCAB = os.getenv("NNSERVER_ENIS_VOCAB", "vocab.translate_enis16k.16384.subwords")
-NNSERVER_PARSING_VOCAB = os.getenv("NNSERVER_PARSING_VOCAB", "parsing_tokens_191202.txt")
+NNSERVER_OPENNMT_IS_VOCAB = os.getenv("NNSERVER_ENIS_VOCAB", "vocab.translate_enis16k_v4.is.nmt-bpe")
+NNSERVER_OPENNMT_EN_VOCAB = os.getenv("NNSERVER_ENIS_VOCAB", "vocab.translate_enis16k_v4.en.nmt-bpe")
 
 try:
     _RESOURCES = pkg_resources.resource_filename(__package__, "resources")
 except (KeyError, TypeError, ValueError) as e:
     _RESOURCES = NNSERVER_RESOURCES
 _ENIS_VOCAB = os.path.join(_RESOURCES, NNSERVER_ENIS_VOCAB)
-_PARSING_VOCAB = os.path.join(_RESOURCES, NNSERVER_PARSING_VOCAB)
+_ONMT_EN_VOCAB = os.path.join(_RESOURCES, NNSERVER_OPENNMT_EN_VOCAB)
+_ONMT_IS_VOCAB = os.path.join(_RESOURCES, NNSERVER_OPENNMT_IS_VOCAB)
