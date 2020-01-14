@@ -348,7 +348,7 @@ class OpenNMTTranslationServerEnIs(NnServer):
 
     src_enc = _SubwordNmtEncoder(_ONMT_EN_VOCAB)
     tgt_enc = _SubwordNmtEncoder(_ONMT_IS_VOCAB)
-    _model_name = "translate_enis16k_v4.baseline-avg-ckpt-2.25M"
+    _model_name = "translate_enis16k_v4.onmt-bilstm.baseline"
 
 
 class OpenNMTTranslationServerIsEn(NnServer):
@@ -356,7 +356,7 @@ class OpenNMTTranslationServerIsEn(NnServer):
 
     src_enc = _SubwordNmtEncoder(_ONMT_EN_VOCAB)
     tgt_enc = _SubwordNmtEncoder(_ONMT_IS_VOCAB)
-    _model_name = "translate_enis16k_v4_rev-avg-ckpt-2.10M"
+    _model_name = "translate_enis16k_v4_rev.onmt-bilstm.baseline"
 
 
 @app.route("/parse.api", methods=["POST"])
