@@ -68,6 +68,17 @@ PAD_ID = text_encoder.PAD_ID
 app = Flask(__name__)
 
 
+MODEL_NAMES = {
+    "transformer": {
+        "is-en": "translate_v2",
+        "en-is": "translate_enis16k"
+    },
+    "bilstm": {
+        "en-is": "bilstm-translate_enis16k_bt"
+    }
+}
+
+
 class NnServer:
     """ Client that mimics the HTTP RESTful interface of
         a tensorflow model server, but accepts plain text. """
@@ -79,8 +90,11 @@ class NnServer:
     tgt_enc = None
 
     @classmethod
-    def request(cls, pgs):
+    def request(cls, pgs, model_name=None):
         """ Send serialized request to remote model server """
+
+        if model_name is None:
+            model_name = cls._model_name
 
         ms_host = os.environ.get('MS_HOST', app.config.get("out_host"))
         ms_port = os.environ.get('MS_PORT', app.config.get("out_port"))
@@ -89,7 +103,7 @@ class NnServer:
             port=ms_port,
             host=ms_host,
             version=cls._tfms_version,
-            model=cls._model_name,
+            model=model_name,
             verb=cls._verb,
         )
         instances = [cls.serialize_to_instance(sent) for sent in pgs]
@@ -103,16 +117,15 @@ class NnServer:
         obj = json.loads(resp.text)
         predictions = obj["predictions"]
         results = [
-            cls.process_response_instance(inst, sent)
+            cls.process_response_instance(inst)
             for (inst, sent) in zip(predictions, pgs)
         ]
         obj["predictions"] = results
         return obj
 
     @classmethod
-    def process_response_instance(cls, instance, sent, src_enc=None, tgt_enc=None):
+    def process_response_instance(cls, instance, tgt_enc=None):
         """  Process the numerical output from the model server for one sentence """
-        src_enc = src_enc or cls.src_enc
         tgt_enc = tgt_enc or cls.tgt_enc
 
         scores = instance["scores"]
@@ -126,11 +139,11 @@ class NnServer:
         pad_start = output_ids.index(PAD_ID) if PAD_ID in output_ids else length
         eos_start = output_ids.index(EOS_ID) if EOS_ID in output_ids else length
         sent_end = min(pad_start, eos_start)
-        output_toks = cls.tgt_enc.decode(output_ids[:sent_end])
+        output_toks = tgt_enc.decode(output_ids[:sent_end])
 
         app.logger.debug(
             "tokenized and depadded: "
-            + str(cls.tgt_enc.decode_list(output_ids[:sent_end]))
+            + str(tgt_enc.decode_list(output_ids[:sent_end]))
         )
         app.logger.info(output_toks)
 
@@ -138,7 +151,7 @@ class NnServer:
         return instance
 
     @classmethod
-    def serialize_to_instance(cls, sent, src_enc=None, tgt_enc=None):
+    def serialize_to_instance(cls, sent, src_enc=None):
         """ Encodes a single sentence into the format expected by the RESTful
             interface of tensorflow_model_server running an exported tensor2tensor
             transformer translation model
@@ -203,7 +216,8 @@ def translate_api():
         req_body = request.data.decode("utf-8")
         obj = json.loads(req_body)
         pgs = obj["pgs"]
-        model_response = TranslateServer.request(pgs)
+        model_name = MODEL_NAMES[obj["model"]]["{}-{}".format(obj["source"], obj["target"])]
+        model_response = TranslateServer.request(pgs, model_name)
         resp = jsonify(model_response)
     except Exception as error:
         resp = jsonify(valid=False, reason="Invalid request")

@@ -168,14 +168,3 @@ class CompositeTokenEncoder(text_encoder.TextEncoder):
             + len(self._ttok_to_tok_id)
         )
 
-
-def test_roundtrip():
-    sample = "P S-MAIN IP NP-SUBJ pfn_et_nf_p3 /NP-SUBJ /IP /S-MAIN /P"
-    default_encoder = CompositeTokenEncoder()
-    subtoken_ids = default_encoder.encode(sample)
-    decoded_sample = default_encoder.decode(subtoken_ids)
-    assert sample == decoded_sample, "Encoding roundtrip does not match"
-
-
-if __name__ == "__main__":
-    test_roundtrip()
