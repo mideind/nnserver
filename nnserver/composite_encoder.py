@@ -362,8 +362,6 @@ class CompositeTokenEncoder:
             + len(self._ttok_to_tok_id)
         )
 
-<<<<<<< Updated upstream
-=======
 
 def test_roundtrip():
     sample = (
@@ -376,4 +374,4 @@ def test_roundtrip():
     subtoken_ids = default_encoder.encode(sample)
     decoded_sample = default_encoder.decode(subtoken_ids)
     assert sample == decoded_sample, "Encoding roundtrip does not match"
->>>>>>> Stashed changes
+

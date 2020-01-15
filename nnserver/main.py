@@ -72,10 +72,15 @@ app = Flask(__name__)
 
 
 MODEL_NAMES = {
-    "transformer": {"is-en": "translate_v2", "en-is": "translate_enis16k"},
-    "bilstm": {"en-is": "bilstm-translate_enis16k_bt"},
+    "transformer": {
+        "is-en": "translate_enis16k_v4_rev-avg-ckpt-2.10M",
+        "en-is": "translate_enis16k_v4.baseline-avg-ckpt-2.25M"
+    },
+    "bilstm": {
+        "en-is": "translate_enis16k_v4.onmt-bilstm",
+        "is-en": "translate_enis16k_v4.onmt-bilstm_rev"
+    }
 }
-
 
 class _SubwordNmtEncoder:
     """Wrap subword-nmt's BPE encoder with Tensor2tensors api"""
@@ -126,6 +131,8 @@ class NnServer:
         payload = cls.package_data(pgs, tgt_pgs)
         headers = {"content-type": "application/json"}
 
+        app.logger.debug(payload)
+
         resp = requests.post(url, json=payload)
         resp.raise_for_status()
 
@@ -140,9 +147,9 @@ class NnServer:
         cls, resp_json_obj, pgs, tgt_pgs=None, src_enc=None, tgt_enc=None
     ):
         src_enc = src_enc or cls.src_enc
-        tgt_enc = src_enc or cls.tgt_enc
+        tgt_enc = tgt_enc or cls.tgt_enc
 
-        def process_response_instance(instance, src_enc=None, tgt_enc=None):
+        def process_response_instance(instance, src_enc=src_enc, tgt_enc=tgt_enc):
             scores = instance["scores"]
             output_ids = instance["outputs"]
 
@@ -183,7 +190,7 @@ class NnServer:
             """
 
             src_enc = src_enc or cls.src_enc
-            tgt_enc = tgt_enc or src_enc
+            tgt_enc = tgt_enc or cls.tgt_enc
 
             input_ids = src_enc.encode(src_segment) + [EOS_ID]
             app.logger.info("input_segment: " + src_segment)
@@ -286,9 +293,9 @@ class OpenNMTTranslationServer(NnServer):
         along with using the OpenNMT model api"""
 
     @classmethod
-    def package_data(cls, pgs):
+    def package_data(cls, pgs, tgt_pgs=None):
         batch = [
-            cls.src_enc.encode(segment) for (segment) in pgs
+            cls.src_enc.encode(segment).split() for segment in pgs
         ]
         batch_width = max(len(item) for item in batch)
 
@@ -311,7 +318,7 @@ class OpenNMTTranslationServer(NnServer):
 
     @classmethod
     def extract_results(
-        cls, resp_json_obj, pgs, tgt_enc=None
+        cls, resp_json_obj, pgs, tgt_pgs = None, src_enc = None, tgt_enc = None
     ):
         tgt_enc = tgt_enc or cls.tgt_enc
 
@@ -322,16 +329,18 @@ class OpenNMTTranslationServer(NnServer):
             app.logger.debug("log_probs: " + str(log_probs))
             app.logger.debug("tokens: " + str(tokens))
 
-            length = instance["length"]
+            lengths = instance["length"]
             # strip eos token
-            tokens = tokens[:length]
-            outputs = tgt_enc.decode(tokens)
+            outputs = []
+            for i in range(len(tokens)):
+                length = lengths[i]
+                outputs.append(tgt_enc.decode(" ".join(tokens[i][:length])))
 
             app.logger.info(outputs)
 
             instance = {
-                "outputs": outputs,
-                "score": log_probs,
+                "outputs": "\n\n".join(outputs),
+                "scores": log_probs,
             }
             return instance
 
@@ -342,21 +351,21 @@ class OpenNMTTranslationServer(NnServer):
         return results
 
 
-class OpenNMTTranslationServerEnIs(NnServer):
+class OpenNMTTranslationServerEnIs(OpenNMTTranslationServer):
     """ Same as TranslateServer, except uses subword-nmt as the encoder
         along with using the OpenNMT model api"""
 
     src_enc = _SubwordNmtEncoder(_ONMT_EN_VOCAB)
     tgt_enc = _SubwordNmtEncoder(_ONMT_IS_VOCAB)
-    _model_name = "translate_enis16k_v4.onmt-bilstm.baseline"
+    _model_name = "translate_enis16k_v4.onmt-bilstm"
 
 
-class OpenNMTTranslationServerIsEn(NnServer):
+class OpenNMTTranslationServerIsEn(OpenNMTTranslationServer):
     """Reverse direction of OpenNMTTranslationServerEnIs"""
 
     src_enc = _SubwordNmtEncoder(_ONMT_EN_VOCAB)
     tgt_enc = _SubwordNmtEncoder(_ONMT_IS_VOCAB)
-    _model_name = "translate_enis16k_v4_rev.onmt-bilstm.baseline"
+    _model_name = "translate_enis16k_v4.onmt-bilstm_rev"
 
 
 @app.route("/parse.api", methods=["POST"])
@@ -386,11 +395,11 @@ def translate_api():
         ]
         if "lstm" in obj["model"]:
             onmt_server = OpenNMTTranslationServerIsEn
-            if "en" not in obj["source"]:
+            if "en" in obj["source"]:
                 onmt_server = OpenNMTTranslationServerEnIs
-            model_response = onmt_server(pgs, model_name)
+            model_response = onmt_server.request(pgs, model_name=model_name)
         else:
-            model_response = TranslateServer.request(pgs, model_name)
+            model_response = TranslateServer.request(pgs, model_name=model_name)
         resp = jsonify(model_response)
     except Exception as error:
         resp = jsonify(valid=False, reason="Invalid request")
