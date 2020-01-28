@@ -300,17 +300,17 @@ class OpenNMTTranslationServer(NnServer):
         batch_width = max(len(item) for item in batch)
 
         # this might not be necessary
-        # lengths = []
-        # padded_batch = []
-        # for item in batch:
-        #     length = len(item)
-        #     padding = [""] * (batch_width - length)
-        #     lengths.append(length)
-        #     item.extend(padding)
-        #     padded_batch.append(item)
+        lengths = []
+        padded_batch = []
+        for item in batch:
+            length = len(item)
+            padding = [""] * (batch_width - length)
+            lengths.append(length)
+            item.extend(padding)
+            padded_batch.append(item)
 
         instances = [
-            {"tokens":item, "length":len(item)} for item in batch
+            {"tokens":item, "length":len(item)} for item in padded_batch
         ]
 
         payload = {"signature_name": "serving_default", "instances": instances}
@@ -363,8 +363,8 @@ class OpenNMTTranslationServerEnIs(OpenNMTTranslationServer):
 class OpenNMTTranslationServerIsEn(OpenNMTTranslationServer):
     """Reverse direction of OpenNMTTranslationServerEnIs"""
 
-    src_enc = _SubwordNmtEncoder(_ONMT_EN_VOCAB)
-    tgt_enc = _SubwordNmtEncoder(_ONMT_IS_VOCAB)
+    src_enc = _SubwordNmtEncoder(_ONMT_IS_VOCAB)
+    tgt_enc = _SubwordNmtEncoder(_ONMT_EN_VOCAB)
     _model_name = "translate_enis16k_v4.onmt-bilstm_rev"
 
 
