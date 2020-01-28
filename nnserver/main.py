@@ -299,7 +299,6 @@ class OpenNMTTranslationServer(NnServer):
         ]
         batch_width = max(len(item) for item in batch)
 
-        # this might not be necessary
         lengths = []
         padded_batch = []
         for item in batch:
