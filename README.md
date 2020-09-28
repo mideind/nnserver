@@ -10,7 +10,7 @@ This repository contains code to serve models trained with the [GreynirT2T](http
 
 ## Models
 
-For serving with docker, store models under `conf/models/`. The baseline models available on CLARIN trained on a cleaned up and filtered variation of ParIce along with backtranslation data. One model for each direction English--Icelandic and Icelandic--English.
+For serving with docker, store models under `conf/models/`. The baseline models available on [CLARIN](https://repository.clarin.is/repository/xmlui/) are trained on a cleaned up and filtered variation of ParIce along with backtranslation data. One model for each direction English--Icelandic and Icelandic--English.
 
 ## Serve models over http
 
