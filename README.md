@@ -6,7 +6,7 @@ Copyright (c) 2020 Miðeind ehf
 
 ## Disclaimer
 
-This repository contains code to serve models trained with the [GreynirT2T](https://github.com/mideind/GreynirT2T) pipeline for NMT, it is no loner maintained since its core Tensor2Tensor has been de facto abandoned for PyTorch. See the repoository [GreynirSeq](https://github.com/mideind/GreynirSeq) for future development on NMT for Icelandic.
+This repository contains code to serve models trained with the [GreynirT2T](https://github.com/mideind/GreynirT2T) pipeline for NMT, it is no loner maintained since its core Tensor2Tensor has been de facto abandoned. See the repoository [GreynirSeq](https://github.com/mideind/GreynirSeq) for future development on NMT for Icelandic.
 
 ## Models
 
