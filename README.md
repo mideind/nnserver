@@ -6,9 +6,9 @@ Copyright (c) 2020 Miðeind ehf
 
 ## Disclaimer
 
-This is based on the GreynirT2T pipeline for NMT, it is no loner maintained since it's core Tensor2Tensor has been de facto abandoned for PyTorch. See the repoository [GreynirSeq](https://github.com/mideind/GreynirSeq) for future development on NMT for Icelandic.
+This repository contains code to serve models trained with the [GreynirT2T](https://github.com/mideind/GreynirT2T) pipeline for NMT, it is no loner maintained since its core Tensor2Tensor has been de facto abandoned for PyTorch. See the repoository [GreynirSeq](https://github.com/mideind/GreynirSeq) for future development on NMT for Icelandic.
 
-## Intro
+## Models
 
 For serving with docker, store models under `conf/models/`. The baseline models available on CLARIN trained on a cleaned up and filtered variation of ParIce along with backtranslation data. One model for each direction English--Icelandic and Icelandic--English.
 
