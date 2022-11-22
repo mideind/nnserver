@@ -40,7 +40,7 @@ setup(
     install_requires=[
         'gevent<=1.4',
         "flask",
-        "tensorflow<2",
+        "tensorflow<3",
         "tensor2tensor",
         "reynir==1.3.1",
         "tokenizer==1.0.8",
